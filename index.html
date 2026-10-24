@@ -41,6 +41,7 @@
   button.big:disabled { opacity:.6; filter:saturate(.7); }
   #rec { height:170px; background:linear-gradient(90deg,#ee7b38,#e8403f); position:relative; overflow:hidden; }
   #rec.on { background:linear-gradient(90deg,#d62f2f,#a3161b); }
+  #rec.warm { background:linear-gradient(90deg,#f5b335,#ee8a2b); }
   #rec .bar { position:absolute; left:0; bottom:0; height:8px; width:0; background:rgba(255,255,255,.85); }
   #rec .time { font-size:16px; font-weight:500; opacity:.9; min-height:20px; }
   .row { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
@@ -131,7 +132,7 @@
   player.preload = 'auto';
 
   let recorder = null, stream = null, chunks = [];
-  let startT = 0, timer = null, autoStop = null;
+  let startT = 0, timer = null, autoStop = null, warmT = null, stopping = false;
   let origUrl = null, revUrl = null, playingBtn = null;
 
   const ICON_PLAY = $('playIcon').innerHTML, ICON_REV = $('revIcon').innerHTML;
@@ -150,7 +151,11 @@
 
   recBtn.onclick = async () => {
     stopPlayback();
-    if (recorder && recorder.state === 'recording') { recorder.stop(); return; }
+    if (stopping) return;
+    if (recorder && recorder.state === 'recording') {
+      if (recBtn.classList.contains('warm')) { clearTimeout(warmT); recorder.stop(); return; }
+      finishRec(); return;
+    }
     msg('');
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
       showFallback('Bu tarayıcı ses kaydını desteklemiyor.'); return;
@@ -168,14 +173,31 @@
     chunks = [];
     recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
     recorder.onstop = onRecStop;
-    recorder.start(250);
-    startT = performance.now();
-    recBtn.classList.add('on');
-    $('recText').innerHTML = '<span class="dot"></span>Kaydı Durdur';
+    // Mic needs a moment to wake up: show "Hazırlan…" and only say "Konuş!" once recording is really running.
+    recBtn.classList.add('warm');
+    $('recText').textContent = 'Hazırlan…';
     playBtn.disabled = revBtn.disabled = true;
-    timer = setInterval(tick, 100); tick();
-    autoStop = setTimeout(() => { if (recorder && recorder.state === 'recording') recorder.stop(); }, MAX_MS);
+    recorder.onstart = () => {
+      warmT = setTimeout(() => {
+        if (!recorder || recorder.state !== 'recording') return;
+        recBtn.classList.remove('warm'); recBtn.classList.add('on');
+        $('recText').innerHTML = '<span class="dot"></span>Konuş! (bitince bas)';
+        startT = performance.now();
+        timer = setInterval(tick, 100); tick();
+        autoStop = setTimeout(finishRec, MAX_MS);
+      }, 600);
+    };
+    recorder.start(250);
   };
+
+  // Keep recording a little after the tap so the last sound isn't clipped either.
+  function finishRec() {
+    if (stopping || !recorder || recorder.state !== 'recording') return;
+    stopping = true;
+    clearInterval(timer); clearTimeout(autoStop);
+    $('recText').textContent = 'Kaydediliyor…';
+    setTimeout(() => { try { recorder.stop(); } catch (e) {} }, 400);
+  }
 
   function tick() {
     const t = Math.min(performance.now() - startT, MAX_MS);
@@ -184,7 +206,8 @@
   }
 
   async function onRecStop() {
-    clearInterval(timer); clearTimeout(autoStop);
+    clearInterval(timer); clearTimeout(autoStop); clearTimeout(warmT); stopping = false;
+    recBtn.classList.remove('warm');
     if (stream) stream.getTracks().forEach(t => t.stop());   // release mic -> back to loudspeaker
     stream = null;
     setSession('playback');
@@ -223,9 +246,11 @@
 
   // Mix to mono, reverse, encode as 16-bit WAV.
   function reversedWav(buf) {
-    const n = buf.length, chs = buf.numberOfChannels, sr = buf.sampleRate;
+    const len = buf.length, chs = buf.numberOfChannels, sr = buf.sampleRate;
+    const pad = Math.round(sr * 0.3);               // 0.3 s silence on both ends so phones don't clip edges
+    const n = len + 2 * pad;
     const mono = new Float32Array(n);
-    for (let c = 0; c < chs; c++) { const d = buf.getChannelData(c); for (let i = 0; i < n; i++) mono[i] += d[i] / chs; }
+    for (let c = 0; c < chs; c++) { const d = buf.getChannelData(c); for (let i = 0; i < len; i++) mono[pad + i] += d[i] / chs; }
     const out = new DataView(new ArrayBuffer(44 + n * 2));
     const str = (o, s) => { for (let i = 0; i < s.length; i++) out.setUint8(o + i, s.charCodeAt(i)); };
     str(0, 'RIFF'); out.setUint32(4, 36 + n * 2, true); str(8, 'WAVE'); str(12, 'fmt ');
