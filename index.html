@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#ffffff">
+<title>Ters Ses Oyunu</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --ink:#1d1f2b; --muted:#7a7f99; --soft:#eaf0fb; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; background:#fff; color:var(--ink); font-family:Poppins, system-ui, -apple-system, sans-serif; }
+  body { padding: calc(env(safe-area-inset-top) + 20px) 20px calc(env(safe-area-inset-bottom) + 24px); min-height:100dvh; }
+  .wrap { max-width:520px; margin:0 auto; }
+  header { display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; }
+  h1 { font-size:28px; margin:0; font-weight:700; }
+  .round { width:52px; height:52px; border-radius:50%; background:var(--soft); border:0; display:grid; place-items:center; color:var(--ink); font-size:22px; font-weight:700; }
+  .label { color:var(--muted); font-weight:600; font-size:17px; margin:22px 0 10px; display:flex; justify-content:space-between; align-items:center; }
+  .label span.info { font-size:14px; font-weight:500; }
+  button.big { width:100%; border:0; border-radius:28px; color:#fff; font-family:inherit; font-weight:600; font-size:24px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; cursor:pointer; transition:transform .08s, opacity .2s; }
+  button.big:active { transform:scale(.97); }
+  button.big:disabled { opacity:.35; }
+  #rec { height:170px; background:linear-gradient(90deg,#ee7b38,#e8403f); position:relative; overflow:hidden; }
+  #rec.on { background:linear-gradient(90deg,#d62f2f,#a3161b); }
+  #rec .bar { position:absolute; left:0; bottom:0; height:8px; width:0; background:rgba(255,255,255,.85); }
+  #rec .time { font-size:16px; font-weight:500; opacity:.9; min-height:20px; }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .row button.big { height:150px; font-size:22px; }
+  #play { background:linear-gradient(135deg,#9b7ff3,#6c9ef6); }
+  #rev { background:linear-gradient(135deg,#94c3d6,#6dd38d); }
+  button.big.playing { box-shadow:0 0 0 4px rgba(29,31,43,.15) inset; }
+  svg { width:46px; height:46px; fill:#fff; }
+  .dot { width:14px; height:14px; border-radius:50%; background:#fff; display:inline-block; animation:blink 1s infinite; margin-right:6px; }
+  @keyframes blink { 50% { opacity:.2; } }
+  #msg { margin-top:18px; min-height:22px; color:#c0392b; font-size:14px; text-align:center; }
+  .help { margin-top:20px; background:#f6f8fc; border-radius:18px; padding:14px 16px; font-size:14px; color:#4a4f66; line-height:1.55; display:none; }
+  .help.show { display:block; }
+  .help ol { margin:6px 0 0; padding-left:20px; }
+  #fallback { display:none; margin-top:12px; text-align:center; font-size:14px; color:var(--muted); }
+  #fallback label { display:inline-block; margin-top:8px; padding:10px 18px; border-radius:14px; background:var(--soft); color:var(--ink); font-weight:600; }
+  #fallback input { display:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Ters Ses Oyunu</h1>
+    <button class="round" id="helpBtn" aria-label="Nasıl oynanır">?</button>
+  </header>
+
+  <div class="help" id="help">
+    <b>Nasıl oynanır?</b>
+    <ol>
+      <li>Baba bir futbolcunun adını kaydeder → <b>Tersine Çevir</b>.</li>
+      <li>Oğlun duyduğu tuhaf sesi taklit ederek kaydeder.</li>
+      <li>Onun kaydını <b>Tersine Çevir</b> ile dinleyin — futbolcunun adı çıkıyor mu?</li>
+    </ol>
+    Kayıt en fazla 10 saniye; aynı düğmeyle durdurulur.
+  </div>
+
+  <div class="label">Sesin: <span class="info" id="lenInfo"></span></div>
+  <button class="big" id="rec">
+    <svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg>
+    <span id="recText">Kaydı Başlat</span>
+    <span class="time" id="recTime"></span>
+    <div class="bar" id="bar"></div>
+  </button>
+  <div id="fallback">
+    Bu ekranda mikrofon açılamadı. Telefonla ses kaydedip dosya seçebilirsin:<br>
+    <label>Ses dosyası seç<input type="file" id="file" accept="audio/*" capture></label>
+  </div>
+
+  <div class="label">Oynatma:</div>
+  <div class="row">
+    <button class="big" id="play" disabled>
+      <svg viewBox="0 0 24 24" id="playIcon"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"/></svg>
+      <span>Oynat</span>
+    </button>
+    <button class="big" id="rev" disabled>
+      <svg viewBox="0 0 24 24" id="revIcon"><path d="M11 6.5v11a1 1 0 0 1-1.6.8L2.2 12.8a1 1 0 0 1 0-1.6l7.2-5.5a1 1 0 0 1 1.6.8zm11 0v11a1 1 0 0 1-1.6.8l-7.2-5.5a1 1 0 0 1 0-1.6l7.2-5.5a1 1 0 0 1 1.6.8z"/></svg>
+      <span>Tersine Çevir</span>
+    </button>
+  </div>
+
+  <div id="msg"></div>
+</div>
+
+<script>
+(() => {
+  const MAX_MS = 10000;
+  const $ = id => document.getElementById(id);
+  const recBtn = $('rec'), playBtn = $('play'), revBtn = $('rev');
+  const msg = t => { $('msg').textContent = t || ''; };
+
+  let ctx = null, recorder = null, stream = null, chunks = [];
+  let startT = 0, timer = null, autoStop = null;
+  let buf = null, revBuf = null, source = null, playingBtn = null;
+
+  const ICON_PLAY = $('playIcon').innerHTML, ICON_REV = $('revIcon').innerHTML;
+  const ICON_STOP = '<rect x="6" y="6" width="12" height="12" rx="2"/>';
+
+  function getCtx() {
+    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state === 'suspended') ctx.resume();
+    return ctx;
+  }
+
+  function pickMime() {
+    if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) return '';
+    for (const m of ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/aac', 'audio/ogg;codecs=opus'])
+      if (MediaRecorder.isTypeSupported(m)) return m;
+    return '';
+  }
+
+  $('helpBtn').onclick = () => $('help').classList.toggle('show');
+
+  recBtn.onclick = async () => {
+    getCtx();               // unlock audio on iOS within the tap
+    stopPlayback();
+    if (recorder && recorder.state === 'recording') { recorder.stop(); return; }
+    msg('');
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
+      showFallback('Bu tarayıcı ses kaydını desteklemiyor.'); return;
+    }
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    } catch (e) {
+      showFallback('Mikrofon izni verilmedi. Tarayıcı ayarlarından izin verip tekrar dene.'); return;
+    }
+    const mime = pickMime();
+    try { recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream); }
+    catch (e) { recorder = new MediaRecorder(stream); }
+    chunks = [];
+    recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+    recorder.onstop = onRecStop;
+    recorder.start();
+    startT = performance.now();
+    recBtn.classList.add('on');
+    $('recText').innerHTML = '<span class="dot"></span>Kaydı Durdur';
+    playBtn.disabled = revBtn.disabled = true;
+    timer = setInterval(tick, 100); tick();
+    autoStop = setTimeout(() => { if (recorder && recorder.state === 'recording') recorder.stop(); }, MAX_MS);
+  };
+
+  function tick() {
+    const t = Math.min(performance.now() - startT, MAX_MS);
+    $('recTime').textContent = (t / 1000).toFixed(1) + ' / 10 sn';
+    $('bar').style.width = (t / MAX_MS * 100) + '%';
+  }
+
+  async function onRecStop() {
+    clearInterval(timer); clearTimeout(autoStop);
+    if (stream) stream.getTracks().forEach(t => t.stop());   // release mic -> iOS back to loudspeaker
+    stream = null;
+    recBtn.classList.remove('on');
+    $('recText').textContent = 'Kaydı Başlat';
+    $('recTime').textContent = '';
+    $('bar').style.width = '0';
+    const blob = new Blob(chunks, { type: (recorder && recorder.mimeType) || 'audio/webm' });
+    await loadBlob(blob);
+  }
+
+  async function loadBlob(blob) {
+    try {
+      const ab = await blob.arrayBuffer();
+      const c = getCtx();
+      const decoded = await new Promise((res, rej) => {
+        const p = c.decodeAudioData(ab, res, rej);
+        if (p && p.then) p.then(res, rej);
+      });
+      buf = decoded;
+      revBuf = c.createBuffer(decoded.numberOfChannels, decoded.length, decoded.sampleRate);
+      for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
+        const src = decoded.getChannelData(ch), dst = revBuf.getChannelData(ch);
+        for (let i = 0, n = src.length; i < n; i++) dst[i] = src[n - 1 - i];
+      }
+      playBtn.disabled = revBtn.disabled = false;
+      $('lenInfo').textContent = 'son kayıt: ' + decoded.duration.toFixed(1) + ' sn';
+      msg('');
+    } catch (e) {
+      msg('Kayıt çözümlenemedi, tekrar dener misin?');
+    }
+  }
+
+  function play(b, btn) {
+    if (playingBtn === btn) { stopPlayback(); return; }
+    stopPlayback();
+    if (!b) return;
+    const c = getCtx();
+    source = c.createBufferSource();
+    source.buffer = b;
+    source.connect(c.destination);
+    source.onended = () => { if (playingBtn === btn) resetBtns(); };
+    source.start();
+    playingBtn = btn;
+    btn.classList.add('playing');
+    btn.querySelector('svg').innerHTML = ICON_STOP;
+  }
+
+  function resetBtns() {
+    playBtn.classList.remove('playing'); revBtn.classList.remove('playing');
+    $('playIcon').innerHTML = ICON_PLAY; $('revIcon').innerHTML = ICON_REV;
+    playingBtn = null; source = null;
+  }
+
+  function stopPlayback() {
+    if (source) { try { source.onended = null; source.stop(); } catch (e) {} }
+    resetBtns();
+  }
+
+  playBtn.onclick = () => play(buf, playBtn);
+  revBtn.onclick = () => play(revBuf, revBtn);
+
+  function showFallback(t) { msg(t); $('fallback').style.display = 'block'; }
+  $('file').onchange = e => { const f = e.target.files[0]; if (f) { getCtx(); loadBlob(f); } e.target.value = ''; };
+})();
+</script>
+</body>
+</html>
