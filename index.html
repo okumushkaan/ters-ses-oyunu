@@ -162,13 +162,17 @@
     }
     setSession('play-and-record');
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Raw mic: no call-style processing (noise suppression / echo cancel / auto gain) — it sounds robotic when reversed.
+      stream = await navigator.mediaDevices.getUserMedia({ audio: {
+        echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } });
     } catch (e) {
       setSession('playback');
       showFallback('Mikrofon izni verilmedi. Tarayıcı ayarlarından izin verip tekrar dene.'); return;
     }
     const mime = pickMime();
-    try { recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream); }
+    const opts = { audioBitsPerSecond: 128000 };
+    if (mime) opts.mimeType = mime;
+    try { recorder = new MediaRecorder(stream, opts); }
     catch (e) { recorder = new MediaRecorder(stream); }
     chunks = [];
     recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
