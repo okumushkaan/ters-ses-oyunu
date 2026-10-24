@@ -96,22 +96,23 @@
   const recBtn = $('rec'), playBtn = $('play'), revBtn = $('rev');
   const msg = t => { $('msg').textContent = t || ''; };
 
-  let ctx = null, recorder = null, stream = null, chunks = [];
+  // Plain <audio> element: plays even when the iPhone silent switch is on (Web Audio does not).
+  const player = new Audio();
+  player.setAttribute('playsinline', '');
+  player.preload = 'auto';
+
+  let recorder = null, stream = null, chunks = [];
   let startT = 0, timer = null, autoStop = null;
-  let buf = null, revBuf = null, source = null, playingBtn = null;
+  let origUrl = null, revUrl = null, playingBtn = null;
 
   const ICON_PLAY = $('playIcon').innerHTML, ICON_REV = $('revIcon').innerHTML;
   const ICON_STOP = '<rect x="6" y="6" width="12" height="12" rx="2"/>';
 
-  function getCtx() {
-    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
-    if (ctx.state === 'suspended') ctx.resume();
-    return ctx;
-  }
+  function setSession(type) { try { if (navigator.audioSession) navigator.audioSession.type = type; } catch (e) {} }
 
   function pickMime() {
     if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) return '';
-    for (const m of ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/aac', 'audio/ogg;codecs=opus'])
+    for (const m of ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/aac', 'audio/ogg;codecs=opus'])
       if (MediaRecorder.isTypeSupported(m)) return m;
     return '';
   }
@@ -119,16 +120,17 @@
   $('helpBtn').onclick = () => $('help').classList.toggle('show');
 
   recBtn.onclick = async () => {
-    getCtx();               // unlock audio on iOS within the tap
     stopPlayback();
     if (recorder && recorder.state === 'recording') { recorder.stop(); return; }
     msg('');
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
       showFallback('Bu tarayıcı ses kaydını desteklemiyor.'); return;
     }
+    setSession('play-and-record');
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (e) {
+      setSession('playback');
       showFallback('Mikrofon izni verilmedi. Tarayıcı ayarlarından izin verip tekrar dene.'); return;
     }
     const mime = pickMime();
@@ -137,7 +139,7 @@
     chunks = [];
     recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
     recorder.onstop = onRecStop;
-    recorder.start();
+    recorder.start(250);
     startT = performance.now();
     recBtn.classList.add('on');
     $('recText').innerHTML = '<span class="dot"></span>Kaydı Durdur';
@@ -154,69 +156,88 @@
 
   async function onRecStop() {
     clearInterval(timer); clearTimeout(autoStop);
-    if (stream) stream.getTracks().forEach(t => t.stop());   // release mic -> iOS back to loudspeaker
+    if (stream) stream.getTracks().forEach(t => t.stop());   // release mic -> back to loudspeaker
     stream = null;
+    setSession('playback');
     recBtn.classList.remove('on');
     $('recText').textContent = 'Kaydı Başlat';
     $('recTime').textContent = '';
     $('bar').style.width = '0';
-    const blob = new Blob(chunks, { type: (recorder && recorder.mimeType) || 'audio/webm' });
+    const type = (recorder && recorder.mimeType) || (chunks[0] && chunks[0].type) || 'audio/mp4';
+    const blob = new Blob(chunks, { type });
+    if (!blob.size) { msg('Ses kaydedilemedi. Mikrofon iznini kontrol edip tekrar dene.'); return; }
     await loadBlob(blob);
   }
 
   async function loadBlob(blob) {
+    if (origUrl) URL.revokeObjectURL(origUrl);
+    if (revUrl) URL.revokeObjectURL(revUrl);
+    origUrl = URL.createObjectURL(blob); revUrl = null;
+    playBtn.disabled = false;
     try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      const ctx = new AC();
       const ab = await blob.arrayBuffer();
-      const c = getCtx();
-      const decoded = await new Promise((res, rej) => {
-        const p = c.decodeAudioData(ab, res, rej);
+      const buf = await new Promise((res, rej) => {
+        const p = ctx.decodeAudioData(ab, res, rej);
         if (p && p.then) p.then(res, rej);
       });
-      buf = decoded;
-      revBuf = c.createBuffer(decoded.numberOfChannels, decoded.length, decoded.sampleRate);
-      for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
-        const src = decoded.getChannelData(ch), dst = revBuf.getChannelData(ch);
-        for (let i = 0, n = src.length; i < n; i++) dst[i] = src[n - 1 - i];
-      }
-      playBtn.disabled = revBtn.disabled = false;
-      $('lenInfo').textContent = 'son kayıt: ' + decoded.duration.toFixed(1) + ' sn';
+      try { ctx.close(); } catch (e) {}
+      revUrl = URL.createObjectURL(reversedWav(buf));
+      revBtn.disabled = false;
+      $('lenInfo').textContent = 'son kayıt: ' + buf.duration.toFixed(1) + ' sn';
       msg('');
     } catch (e) {
-      msg('Kayıt çözümlenemedi, tekrar dener misin?');
+      msg('Kayıt alındı ama ters çevrilemedi. Tekrar dener misin?');
     }
   }
 
-  function play(b, btn) {
+  // Mix to mono, reverse, encode as 16-bit WAV.
+  function reversedWav(buf) {
+    const n = buf.length, chs = buf.numberOfChannels, sr = buf.sampleRate;
+    const mono = new Float32Array(n);
+    for (let c = 0; c < chs; c++) { const d = buf.getChannelData(c); for (let i = 0; i < n; i++) mono[i] += d[i] / chs; }
+    const out = new DataView(new ArrayBuffer(44 + n * 2));
+    const str = (o, s) => { for (let i = 0; i < s.length; i++) out.setUint8(o + i, s.charCodeAt(i)); };
+    str(0, 'RIFF'); out.setUint32(4, 36 + n * 2, true); str(8, 'WAVE'); str(12, 'fmt ');
+    out.setUint32(16, 16, true); out.setUint16(20, 1, true); out.setUint16(22, 1, true);
+    out.setUint32(24, sr, true); out.setUint32(28, sr * 2, true); out.setUint16(32, 2, true); out.setUint16(34, 16, true);
+    str(36, 'data'); out.setUint32(40, n * 2, true);
+    for (let i = 0; i < n; i++) {
+      const s = Math.max(-1, Math.min(1, mono[n - 1 - i]));
+      out.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+    }
+    return new Blob([out], { type: 'audio/wav' });
+  }
+
+  function play(url, btn) {
     if (playingBtn === btn) { stopPlayback(); return; }
     stopPlayback();
-    if (!b) return;
-    const c = getCtx();
-    source = c.createBufferSource();
-    source.buffer = b;
-    source.connect(c.destination);
-    source.onended = () => { if (playingBtn === btn) resetBtns(); };
-    source.start();
+    if (!url) return;
+    player.src = url;
+    player.currentTime = 0;
+    const p = player.play();
+    if (p && p.catch) p.catch(() => { resetBtns(); msg('Ses çalınamadı. Telefonun ses seviyesini kontrol edip tekrar bas.'); });
     playingBtn = btn;
     btn.classList.add('playing');
     btn.querySelector('svg').innerHTML = ICON_STOP;
   }
 
+  player.onended = () => resetBtns();
+
   function resetBtns() {
     playBtn.classList.remove('playing'); revBtn.classList.remove('playing');
     $('playIcon').innerHTML = ICON_PLAY; $('revIcon').innerHTML = ICON_REV;
-    playingBtn = null; source = null;
+    playingBtn = null;
   }
 
-  function stopPlayback() {
-    if (source) { try { source.onended = null; source.stop(); } catch (e) {} }
-    resetBtns();
-  }
+  function stopPlayback() { try { player.pause(); } catch (e) {} resetBtns(); }
 
-  playBtn.onclick = () => play(buf, playBtn);
-  revBtn.onclick = () => play(revBuf, revBtn);
+  playBtn.onclick = () => play(origUrl, playBtn);
+  revBtn.onclick = () => play(revUrl, revBtn);
 
   function showFallback(t) { msg(t); $('fallback').style.display = 'block'; }
-  $('file').onchange = e => { const f = e.target.files[0]; if (f) { getCtx(); loadBlob(f); } e.target.value = ''; };
+  $('file').onchange = e => { const f = e.target.files[0]; if (f) loadBlob(f); e.target.value = ''; };
 })();
 </script>
 </body>
