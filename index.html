@@ -5,25 +5,40 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="theme-color" content="#ffffff">
-<title>Ters Ses Oyunu</title>
+<meta name="theme-color" content="#1f7a3a">
+<title>Bora'nın Oyunu</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&family=Bebas+Neue&display=swap" rel="stylesheet">
 <style>
   :root { --ink:#1d1f2b; --muted:#7a7f99; --soft:#eaf0fb; }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-  html,body { margin:0; background:#fff; color:var(--ink); font-family:Poppins, system-ui, -apple-system, sans-serif; }
-  body { padding: calc(env(safe-area-inset-top) + 20px) 20px calc(env(safe-area-inset-bottom) + 24px); min-height:100dvh; }
-  .wrap { max-width:520px; margin:0 auto; }
-  header { display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; }
-  h1 { font-size:28px; margin:0; font-weight:700; }
-  .round { width:52px; height:52px; border-radius:50%; background:var(--soft); border:0; display:grid; place-items:center; color:var(--ink); font-size:22px; font-weight:700; }
-  .label { color:var(--muted); font-weight:600; font-size:17px; margin:22px 0 10px; display:flex; justify-content:space-between; align-items:center; }
+  html { background:#1f7a3a; }
+  html,body { margin:0; color:#fff; font-family:Poppins, system-ui, -apple-system, sans-serif; }
+  body { padding: calc(env(safe-area-inset-top) + 18px) 20px calc(env(safe-area-inset-bottom) + 24px); min-height:100dvh; }
+  #pitch { position:fixed; inset:0; z-index:0; overflow:hidden;
+    background:
+      radial-gradient(ellipse at 50% 0%, rgba(255,255,255,.18), transparent 55%),
+      radial-gradient(ellipse at 50% 120%, rgba(0,0,0,.35), transparent 60%),
+      repeating-linear-gradient(180deg, #2c9a4b 0 64px, #258a42 64px 128px); }
+  #pitch svg { position:absolute; inset:0; width:100%; height:100%; fill:none; stroke:rgba(255,255,255,.55); stroke-width:3; }
+  .wrap { max-width:520px; margin:0 auto; position:relative; z-index:1; }
+  header { position:relative; text-align:center; margin:40px 0 18px; }
+  .title { font-family:'Bebas Neue', Impact, sans-serif; font-size:clamp(42px, 12vw, 68px); line-height:.95; white-space:nowrap; padding:0 14px; margin:0; letter-spacing:1px;
+    transform:skew(-8deg); display:inline-flex; align-items:center; gap:10px;
+    background:linear-gradient(180deg,#fff7c2 0%,#ffd54a 45%,#f2a900 55%,#ffe27a 100%); -webkit-background-clip:text; background-clip:text; color:transparent;
+    filter:drop-shadow(0 3px 0 #0b3d1c) drop-shadow(0 6px 10px rgba(0,0,0,.45)); }
+  .ball { width:.8em; height:.8em; flex:none; transform:skew(8deg); filter:none; animation:spin 6s linear infinite; }
+  @keyframes spin { to { transform:skew(8deg) rotate(360deg); } }
+  .sub { margin-top:8px; font-size:12px; font-weight:700; letter-spacing:3px; color:#fff; text-transform:uppercase; opacity:.95;
+    display:inline-block; background:rgba(0,0,0,.28); padding:5px 12px; border-radius:20px; }
+  .round { position:absolute; right:0; top:-40px; width:44px; height:44px; border-radius:50%; background:rgba(255,255,255,.9); border:0; display:grid; place-items:center; color:var(--ink); font-size:20px; font-weight:700; box-shadow:0 4px 12px rgba(0,0,0,.25); }
+  .label { color:#fff; font-weight:600; font-size:17px; margin:20px 0 10px; display:flex; justify-content:space-between; align-items:center; text-shadow:0 1px 3px rgba(0,0,0,.4); }
   .label span.info { font-size:14px; font-weight:500; }
   button.big { width:100%; border:0; border-radius:28px; color:#fff; font-family:inherit; font-weight:600; font-size:24px;
-    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; cursor:pointer; transition:transform .08s, opacity .2s; }
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; cursor:pointer; transition:transform .08s, opacity .2s;
+    box-shadow:0 10px 24px rgba(0,0,0,.3), inset 0 0 0 3px rgba(255,255,255,.25); }
   button.big:active { transform:scale(.97); }
-  button.big:disabled { opacity:.35; }
+  button.big:disabled { opacity:.6; filter:saturate(.7); }
   #rec { height:170px; background:linear-gradient(90deg,#ee7b38,#e8403f); position:relative; overflow:hidden; }
   #rec.on { background:linear-gradient(90deg,#d62f2f,#a3161b); }
   #rec .bar { position:absolute; left:0; bottom:0; height:8px; width:0; background:rgba(255,255,255,.85); }
@@ -31,24 +46,38 @@
   .row { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
   .row button.big { height:150px; font-size:22px; }
   #play { background:linear-gradient(135deg,#9b7ff3,#6c9ef6); }
-  #rev { background:linear-gradient(135deg,#94c3d6,#6dd38d); }
-  button.big.playing { box-shadow:0 0 0 4px rgba(29,31,43,.15) inset; }
-  svg { width:46px; height:46px; fill:#fff; }
+  #rev { background:linear-gradient(135deg,#3fb6d8,#2bb673); }
+  button.big.playing { box-shadow:0 0 0 5px rgba(255,255,255,.7) inset, 0 10px 24px rgba(0,0,0,.3); }
+  button.big svg { width:46px; height:46px; fill:#fff; }
   .dot { width:14px; height:14px; border-radius:50%; background:#fff; display:inline-block; animation:blink 1s infinite; margin-right:6px; }
   @keyframes blink { 50% { opacity:.2; } }
-  #msg { margin-top:18px; min-height:22px; color:#c0392b; font-size:14px; text-align:center; }
-  .help { margin-top:20px; background:#f6f8fc; border-radius:18px; padding:14px 16px; font-size:14px; color:#4a4f66; line-height:1.55; display:none; }
+  #msg { margin-top:18px; min-height:22px; color:#fff; font-weight:600; font-size:14px; text-align:center; text-shadow:0 1px 3px rgba(0,0,0,.6); }
+  .help { margin-top:4px; background:rgba(255,255,255,.95); border-radius:18px; padding:14px 16px; font-size:14px; color:#2b3045; line-height:1.55; display:none; box-shadow:0 8px 20px rgba(0,0,0,.25); }
   .help.show { display:block; }
   .help ol { margin:6px 0 0; padding-left:20px; }
-  #fallback { display:none; margin-top:12px; text-align:center; font-size:14px; color:var(--muted); }
-  #fallback label { display:inline-block; margin-top:8px; padding:10px 18px; border-radius:14px; background:var(--soft); color:var(--ink); font-weight:600; }
+  #fallback { display:none; margin-top:12px; text-align:center; font-size:14px; color:#fff; }
+  #fallback label { display:inline-block; margin-top:8px; padding:10px 18px; border-radius:14px; background:#fff; color:var(--ink); font-weight:600; }
   #fallback input { display:none; }
 </style>
 </head>
 <body>
+<div id="pitch" aria-hidden="true">
+  <svg viewBox="0 0 400 800" preserveAspectRatio="none">
+    <rect x="20" y="20" width="360" height="760"/>
+    <line x1="20" y1="400" x2="380" y2="400"/>
+    <circle cx="200" cy="400" r="60"/>
+    <rect x="100" y="20" width="200" height="110"/><rect x="155" y="20" width="90" height="40"/>
+    <rect x="100" y="670" width="200" height="110"/><rect x="155" y="740" width="90" height="40"/>
+    <path d="M160 130 A50 50 0 0 0 240 130"/><path d="M160 670 A50 50 0 0 1 240 670"/>
+  </svg>
+</div>
 <div class="wrap">
   <header>
-    <h1>Ters Ses Oyunu</h1>
+    <h1 class="title">
+      <svg class="ball" viewBox="0 0 100 100"><circle cx="50" cy="50" r="47" fill="#fff" stroke="#111" stroke-width="4"/><polygon points="50,30 69,44 62,66 38,66 31,44" fill="#111"/><path d="M50 30V6M69 44l22-8M62 66l14 20M38 66L24 86M31 44L9 36" stroke="#111" stroke-width="4"/></svg>
+      BORA'NIN OYUNU
+    </h1>
+    <div class="sub">Ters Ses Futbolcu Yarışması</div>
     <button class="round" id="helpBtn" aria-label="Nasıl oynanır">?</button>
   </header>
 
@@ -56,7 +85,7 @@
     <b>Nasıl oynanır?</b>
     <ol>
       <li>Baba bir futbolcunun adını kaydeder → <b>Tersine Çevir</b>.</li>
-      <li>Oğlun duyduğu tuhaf sesi taklit ederek kaydeder.</li>
+      <li>Bora duyduğu tuhaf sesi taklit ederek kaydeder.</li>
       <li>Onun kaydını <b>Tersine Çevir</b> ile dinleyin — futbolcunun adı çıkıyor mu?</li>
     </ol>
     Kayıt en fazla 10 saniye; aynı düğmeyle durdurulur.
